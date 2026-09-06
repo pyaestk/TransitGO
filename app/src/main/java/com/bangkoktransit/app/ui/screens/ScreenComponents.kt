@@ -355,7 +355,7 @@ fun TripRow(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CompactMetric(trip.routeType.displayPathType(), tint = TransitBlue)
@@ -364,6 +364,7 @@ fun TripRow(
                         style = MaterialTheme.typography.titleSmall,
                         color = TransitGreen,
                         fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(start = 10.dp),
                     )
                 }
                 Text(
