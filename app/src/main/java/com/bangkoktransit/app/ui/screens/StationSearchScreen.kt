@@ -190,6 +190,14 @@ fun StationSearchScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 20.dp),
                 ) {
+                    if (mode != StationPickerMode.Browse && query.isBlank() && selectedLine == "All") {
+                        item(key = "nearby") {
+                            NearbyStationsSection(state.stations, onStationSelected, onRetry)
+                        }
+                        item(key = "all-stations") {
+                            Text("All stations", style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
                     items(
                         items = filteredStations,
                         key = { station -> station.stationCode },

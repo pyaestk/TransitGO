@@ -153,6 +153,8 @@ class BangkokRailwayApi(
             place = json.optJSONObject("place")?.let(::parsePlace),
             x = json.optDouble("x"),
             y = json.optDouble("y"),
+            latitude = json.optDouble("latitude").takeIf { it.isFinite() && it in -90.0..90.0 },
+            longitude = json.optDouble("longitude").takeIf { it.isFinite() && it in -180.0..180.0 },
         )
     }
 

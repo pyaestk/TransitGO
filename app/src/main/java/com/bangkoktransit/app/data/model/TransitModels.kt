@@ -22,6 +22,8 @@ data class Station(
     val place: PlaceInfo? = null,
     val x: Double = 0.0,
     val y: Double = 0.0,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 ) {
     val displayCode: String
         get() = stationShortName.ifBlank { stationCode }
