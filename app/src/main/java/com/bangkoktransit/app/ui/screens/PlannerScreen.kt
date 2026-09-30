@@ -15,7 +15,9 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,17 +52,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.Station
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitCoral
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitLine
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
 
 private const val PlannerMotionFastMillis = 160
@@ -109,12 +109,13 @@ fun PlannerScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ScreenHeader(
             title = "Plan trip",
             subtitle = routeSubtitle,
+            modifier = Modifier.padding(horizontal = 16.dp),
             action = if (hasRouteOutput) {
                 {
                     QuietActionButton(
@@ -129,24 +130,31 @@ fun PlannerScreen(
         )
 
         if (state.stationError != null && state.stations.isEmpty()) {
-            EmptyStateCard(
-                title = "Station data is unavailable",
-                body = state.stationError,
-                actionText = "Try again",
-                onAction = onRefreshStations,
-            )
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                EmptyStateCard(
+                    title = "Station data is unavailable",
+                    body = state.stationError,
+                    actionText = "Try again",
+                    onAction = onRefreshStations,
+                )
+            }
         }
 
-        TransitCard(modifier = Modifier.fillMaxWidth(), tint = TransitBlue) {
+        TransitCard(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(),
+            tint = MaterialTheme.colorScheme.primary,
+        ) {
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 StationSelectCard(
                     label = "From",
                     station = state.selectedStart,
                     placeholder = "Choose start station",
-                    tint = TransitBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     onClick = onChooseStart,
                 )
 
@@ -170,7 +178,7 @@ fun PlannerScreen(
                     label = "To",
                     station = state.selectedTarget,
                     placeholder = "Choose destination",
-                    tint = TransitCoral,
+                    tint = MaterialTheme.colorScheme.tertiary,
                     onClick = onChooseTarget,
                 )
 
@@ -194,6 +202,7 @@ fun PlannerScreen(
 
         AnimatedVisibility(
             visible = state.isPlanningRoute,
+            modifier = Modifier.padding(horizontal = 16.dp),
             enter = expandVertically(
                 expandFrom = Alignment.Top,
                 animationSpec = tween(
@@ -284,9 +293,8 @@ private fun RouteSummaryCarousel(
     ) {
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clipToBounds(),
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             pageSpacing = 12.dp,
             verticalAlignment = Alignment.Top,
         ) { page ->
@@ -338,7 +346,11 @@ private fun RoutePageIndicator(
                 modifier = Modifier
                     .padding(horizontal = 3.dp)
                     .size(dotSize),
-                color = if (index == currentPage) TransitBlue else TransitLine,
+                color = if (index == currentPage) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
                 shape = RoundedCornerShape(8.dp),
             ) {}
         }
@@ -373,20 +385,27 @@ private fun StationSelectCard(
                 scaleX = stationScale.value
                 scaleY = stationScale.value
             }
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         color = tint.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
     ) {
         Row(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StationCodeBadge(
-                code = station?.displayCode ?: label.take(1),
-                color = tint,
-            )
+            if (station != null) {
+                TransitLineLogo(
+                    lineName = station.line?.nameEn,
+                    size = 48.dp,
+                )
+            } else {
+                StationCodeBadge(
+                    code = label.take(1),
+                    color = tint,
+                )
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(
                 modifier = Modifier.weight(1f),
@@ -404,14 +423,27 @@ private fun StationSelectCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (station != null) {
-                    Text(
-                        text = station.line?.nameEn ?: "Transit line",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = station.line?.nameEn ?: "Transit line",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+            }
+            if (station != null) {
+                CompactMetric(
+                    text = station.displayCode,
+                    tint = lineColorForName(station.line?.nameEn),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
             }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -473,11 +505,11 @@ private fun RouteSummaryPanel(
                 scaleX = routeScale.value
                 scaleY = routeScale.value
             },
-        tint = if (selected) TransitGreen else TransitLine,
+        tint = if (selected) TransitGreen else MaterialTheme.colorScheme.outline,
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

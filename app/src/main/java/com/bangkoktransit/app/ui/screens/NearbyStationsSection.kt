@@ -25,7 +25,7 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.bangkoktransit.app.data.model.*
+import com.bangkoktransit.app.domain.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlin.coroutines.resume

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,14 +38,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.Station
 import com.bangkoktransit.app.ui.StationPickerMode
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitLine
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
 
 @Composable
@@ -83,26 +85,28 @@ fun StationSearchScreen(
         StationPickerMode.Start -> "From"
         StationPickerMode.Target -> "To"
     }
-    val stationCountText = if (selectedLine == "All") {
-        "${filteredStations.size} stations"
-    } else {
-        "$selectedLine / ${filteredStations.size} stations"
-    }
+//    val stationCountText = if (selectedLine == "All") {
+//        "${filteredStations.size} stations"
+//    } else {
+//        "$selectedLine / ${filteredStations.size} stations"
+//    }
+
+    val stationCountText = "${filteredStations.size} stations"
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ScreenHeader(
             title = title,
             subtitle = "Search by name or code",
             action = {
-                QuietActionButton(
-                    text = "Back",
+                IconActionButton(
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
                     onClick = onBack,
                 )
             },
@@ -110,15 +114,15 @@ fun StationSearchScreen(
 
         TransitCard(modifier = Modifier.fillMaxWidth(), tint = TransitBlue) {
             Column(
-                modifier = Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp),
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(12.dp),
                     leadingIcon = {
                         Icon(imageVector = Icons.Filled.Search, contentDescription = null)
                     },
@@ -186,9 +190,11 @@ fun StationSearchScreen(
 
             else -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 20.dp),
+                    contentPadding = PaddingValues(bottom = 28.dp),
                 ) {
                     if (mode != StationPickerMode.Browse && query.isBlank() && selectedLine == "All") {
                         item(key = "nearby") {
@@ -206,13 +212,9 @@ fun StationSearchScreen(
                             station = station,
                             onClick = { onStationSelected(station) },
                             trailing = {
-                                Text(
+                                StationSelectionPill(
                                     text = actionLabel,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = lineColorForName(station.line?.nameEn),
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    tint = lineColorForName(station.line?.nameEn),
                                 )
                             },
                         )
@@ -249,28 +251,57 @@ private fun LineFilterChip(
     val tint = if (label == "All") TransitBlue else lineColorForName(label)
     Surface(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .defaultMinSize(minHeight = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        color = if (selected) tint else MaterialTheme.colorScheme.surface,
-        contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, if (selected) tint else TransitLine),
+        color = if (selected) tint.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            1.dp,
+            if (selected) tint.copy(alpha = 0.72f) else MaterialTheme.colorScheme.outline,
+        ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Surface(
-                modifier = Modifier.size(7.dp),
-                color = if (selected) Color.White.copy(alpha = 0.8f) else tint,
-                shape = CircleShape,
-            ) {}
+            TransitLineLogo(
+                lineName = label.takeUnless { it == "All" },
+                size = 26.dp,
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
             )
         }
+    }
+}
+
+@Composable
+private fun StationSelectionPill(
+    text: String,
+    tint: Color,
+) {
+    val readableTint = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+        lerp(tint, Color.White, 0.36f)
+    } else {
+        tint
+    }
+    Surface(
+        color = tint.copy(alpha = 0.08f),
+        contentColor = readableTint,
+        shape = RoundedCornerShape(50),
+        border = BorderStroke(1.dp, readableTint.copy(alpha = 0.42f)),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }

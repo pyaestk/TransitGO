@@ -1,33 +1,32 @@
 package com.bangkoktransit.app.data.repository
 
-import android.content.Context
 import com.bangkoktransit.app.data.api.BangkokRailwayApi
 import com.bangkoktransit.app.data.local.TransitDataCache
-import com.bangkoktransit.app.data.model.PlaceGroup
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.PlaceGroup
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.Station
+import com.bangkoktransit.app.domain.repository.TransitRepository as TransitRepositoryContract
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
 class TransitRepository(
-    context: Context? = null,
+    private val dataCache: TransitDataCache,
     private val api: BangkokRailwayApi = BangkokRailwayApi(),
-) {
-    private val dataCache = context?.applicationContext?.let(::TransitDataCache)
+) : TransitRepositoryContract {
     private var stationCache: List<Station>? = null
     private var placeCache: List<PlaceGroup>? = null
     private val routeCache = mutableMapOf<String, RouteCacheEntry>()
 
-    suspend fun getStations(forceRefresh: Boolean = false): List<Station> {
+    override suspend fun getStations(forceRefresh: Boolean): List<Station> {
         val cached = stationCache
         if (!forceRefresh && cached != null) return cached
 
         if (!forceRefresh) {
-            dataCache?.readStations(STATION_CACHE_MAX_AGE_MS)?.let { json ->
+            dataCache.readStations(STATION_CACHE_MAX_AGE_MS)?.let { json ->
                 return api.parseStations(json).also { stationCache = it }
             }
 
-            dataCache?.readFallbackStations()?.let { json ->
+            dataCache.readFallbackStations()?.let { json ->
                 return api.parseStations(json).also { stationCache = it }
             }
         }
@@ -35,19 +34,19 @@ class TransitRepository(
         return refreshStations()
     }
 
-    suspend fun refreshStations(): List<Station> {
+    override suspend fun refreshStations(): List<Station> {
         val json = api.fetchStationsJson()
-        dataCache?.writeStations(json)
+        dataCache.writeStations(json)
         return api.parseStations(json).also { stationCache = it }
     }
 
-    suspend fun getPlaces(forceRefresh: Boolean = false): List<PlaceGroup> {
+    override suspend fun getPlaces(forceRefresh: Boolean): List<PlaceGroup> {
         val cached = placeCache
         if (!forceRefresh && cached != null) return cached
         return api.fetchPlaces().also { placeCache = it }
     }
 
-    suspend fun getRouteOptions(fromStationCode: String, toStationCode: String): List<RoutePath> {
+    override suspend fun getRouteOptions(fromStationCode: String, toStationCode: String): List<RoutePath> {
         val cacheKey = routeCacheKey(fromStationCode, toStationCode)
         val cached = routeCache[cacheKey]
         if (cached != null && System.currentTimeMillis() - cached.savedAt <= ROUTE_CACHE_MAX_AGE_MS) {

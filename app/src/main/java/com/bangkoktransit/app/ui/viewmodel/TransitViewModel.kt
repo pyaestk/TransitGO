@@ -1,17 +1,17 @@
 package com.bangkoktransit.app.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.bangkoktransit.app.data.local.TripStore
-import com.bangkoktransit.app.data.model.PlaceGroup
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.RoutePreference
-import com.bangkoktransit.app.data.model.SavedTrip
-import com.bangkoktransit.app.data.model.Station
-import com.bangkoktransit.app.data.repository.TransitRepository
+import com.bangkoktransit.app.domain.model.PlaceGroup
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.RoutePreference
+import com.bangkoktransit.app.domain.model.SavedTrip
+import com.bangkoktransit.app.domain.model.Station
+import com.bangkoktransit.app.domain.usecase.GetPlaces
+import com.bangkoktransit.app.domain.usecase.GetRouteOptions
+import com.bangkoktransit.app.domain.usecase.GetStations
+import com.bangkoktransit.app.domain.usecase.ManageSavedTrips
+import com.bangkoktransit.app.domain.usecase.RefreshStations
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -35,14 +35,16 @@ data class TransitUiState(
 )
 
 class TransitViewModel(
-    application: Application,
-    private val repository: TransitRepository = TransitRepository(application),
-    private val tripStore: TripStore = TripStore(application),
-) : AndroidViewModel(application) {
+    private val getStations: GetStations,
+    private val refreshStations: RefreshStations,
+    private val getPlaces: GetPlaces,
+    private val getRouteOptions: GetRouteOptions,
+    private val savedTrips: ManageSavedTrips,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(
         TransitUiState(
-            savedTrips = tripStore.savedTrips(),
-            recentTrips = tripStore.recentTrips(),
+            savedTrips = savedTrips.savedTrips(),
+            recentTrips = savedTrips.recentTrips(),
         ),
     )
     val uiState: StateFlow<TransitUiState> = _uiState
@@ -62,7 +64,7 @@ class TransitViewModel(
             }
 
             try {
-                val stations = repository.getStations(forceRefresh)
+                val stations = getStations(forceRefresh)
                 _uiState.update {
                     it.copy(
                         stations = stations,
@@ -71,7 +73,7 @@ class TransitViewModel(
                     )
                 }
 
-                val places = runCatching { repository.getPlaces(forceRefresh) }
+                val places = runCatching { getPlaces(forceRefresh) }
                     .getOrDefault(emptyList())
 
                 _uiState.update {
@@ -79,7 +81,7 @@ class TransitViewModel(
                 }
 
                 if (!forceRefresh) {
-                    runCatching { repository.refreshStations() }
+                    runCatching { refreshStations() }
                         .onSuccess { freshStations ->
                             _uiState.update {
                                 it.copy(
@@ -157,7 +159,7 @@ class TransitViewModel(
             state.copy(
                 routePreference = preference,
                 activeRoute = selected,
-                isActiveRouteSaved = tripStore.isSaved(
+                isActiveRouteSaved = savedTrips.isSaved(
                     state.selectedStart,
                     state.selectedTarget,
                     selected,
@@ -170,7 +172,7 @@ class TransitViewModel(
         _uiState.update {
             it.copy(
                 activeRoute = route,
-                isActiveRouteSaved = tripStore.isSaved(it.selectedStart, it.selectedTarget, route),
+                isActiveRouteSaved = savedTrips.isSaved(it.selectedStart, it.selectedTarget, route),
             )
         }
     }
@@ -203,7 +205,7 @@ class TransitViewModel(
             }
 
             try {
-                val routes = repository.getRouteOptions(start.stationCode, target.stationCode)
+                val routes = getRouteOptions(start.stationCode, target.stationCode)
                 if (routes.isEmpty()) {
                     _uiState.update {
                         it.copy(
@@ -215,7 +217,7 @@ class TransitViewModel(
                 }
 
                 val selectedRoute = chooseRoute(routes, _uiState.value.routePreference) ?: routes.first()
-                tripStore.addRecent(start, target, selectedRoute)
+                savedTrips.addRecent(start, target, selectedRoute)
 
                 _uiState.update {
                     it.copy(
@@ -223,9 +225,9 @@ class TransitViewModel(
                         activeRoute = selectedRoute,
                         isPlanningRoute = false,
                         routeError = null,
-                        recentTrips = tripStore.recentTrips(),
-                        savedTrips = tripStore.savedTrips(),
-                        isActiveRouteSaved = tripStore.isSaved(start, target, selectedRoute),
+                        recentTrips = savedTrips.recentTrips(),
+                        savedTrips = savedTrips.savedTrips(),
+                        isActiveRouteSaved = savedTrips.isSaved(start, target, selectedRoute),
                     )
                 }
             } catch (error: Exception) {
@@ -244,33 +246,33 @@ class TransitViewModel(
         val start = state.selectedStart ?: return
         val target = state.selectedTarget ?: return
         val route = state.activeRoute ?: return
-        val isSavedNow = tripStore.toggleSaved(start, target, route)
+        val isSavedNow = savedTrips.toggleSaved(start, target, route)
         _uiState.update {
             it.copy(
-                savedTrips = tripStore.savedTrips(),
-                recentTrips = tripStore.recentTrips(),
+                savedTrips = savedTrips.savedTrips(),
+                recentTrips = savedTrips.recentTrips(),
                 isActiveRouteSaved = isSavedNow,
             )
         }
     }
 
     fun removeSavedTrip(trip: SavedTrip) {
-        tripStore.removeSaved(trip)
+        savedTrips.removeSaved(trip)
         refreshStoredTrips()
     }
 
     fun removeRecentTrip(trip: SavedTrip) {
-        tripStore.removeRecent(trip)
+        savedTrips.removeRecent(trip)
         refreshStoredTrips()
     }
 
     fun clearSavedTrips() {
-        tripStore.clearSaved()
+        savedTrips.clearSaved()
         refreshStoredTrips()
     }
 
     fun clearRecentTrips() {
-        tripStore.clearRecent()
+        savedTrips.clearRecent()
         refreshStoredTrips()
     }
 
@@ -301,9 +303,9 @@ class TransitViewModel(
     private fun refreshStoredTrips() {
         _uiState.update {
             it.copy(
-                savedTrips = tripStore.savedTrips(),
-                recentTrips = tripStore.recentTrips(),
-                isActiveRouteSaved = tripStore.isSaved(
+                savedTrips = savedTrips.savedTrips(),
+                recentTrips = savedTrips.recentTrips(),
+                isActiveRouteSaved = savedTrips.isSaved(
                     it.selectedStart,
                     it.selectedTarget,
                     it.activeRoute,
@@ -343,14 +345,4 @@ class TransitViewModel(
         )
     }
 
-    companion object {
-        fun factory(application: Application): ViewModelProvider.Factory {
-            return object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return TransitViewModel(application) as T
-                }
-            }
-        }
-    }
 }

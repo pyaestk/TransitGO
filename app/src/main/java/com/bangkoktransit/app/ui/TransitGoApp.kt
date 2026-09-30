@@ -1,6 +1,5 @@
 package com.bangkoktransit.app.ui
 
-import android.app.Application
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.WindowInsets
@@ -24,20 +23,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import org.koin.androidx.compose.koinViewModel
 import com.bangkoktransit.app.ui.screens.MapScreen
 import com.bangkoktransit.app.ui.screens.PlannerScreen
 import com.bangkoktransit.app.ui.screens.SavedTripsScreen
 import com.bangkoktransit.app.ui.screens.SettingsScreen
 import com.bangkoktransit.app.ui.screens.StationDetailScreen
 import com.bangkoktransit.app.ui.screens.StationSearchScreen
-import com.bangkoktransit.app.ui.theme.TransitBlue
-import com.bangkoktransit.app.ui.theme.TransitLine
 import com.bangkoktransit.app.ui.viewmodel.TransitViewModel
 
 sealed interface AppScreen {
@@ -63,13 +60,14 @@ private enum class MainTab(val label: String, val icon: ImageVector, val screen:
 }
 
 @Composable
-fun TransitGoApp() {
-    val application = LocalContext.current.applicationContext as Application
-    val viewModel: TransitViewModel = viewModel(
-        factory = TransitViewModel.factory(application),
-    )
+fun TransitGoApp(
+    darkModeEnabled: Boolean,
+    onDarkModeChanged: (Boolean) -> Unit,
+) {
+    val viewModel: TransitViewModel = koinViewModel()
     val state by viewModel.uiState.collectAsState()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Planner) }
+    var isMapSheetExpanded by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = screen != AppScreen.Planner) {
         val currentScreen = screen
@@ -87,7 +85,6 @@ fun TransitGoApp() {
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, TransitLine),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
             ) {
@@ -133,6 +130,8 @@ fun TransitGoApp() {
                     onPlanRoute = viewModel::planRoute,
                     onSelectRoute = viewModel::selectRoute,
                     onClearRoute = viewModel::clearRoute,
+                    sheetExpanded = isMapSheetExpanded,
+                    onSheetExpandedChange = { isMapSheetExpanded = it },
                 )
                 AppScreen.SavedTrips -> SavedTripsScreen(
                     state = state,
@@ -146,7 +145,10 @@ fun TransitGoApp() {
                     onClearSavedTrips = viewModel::clearSavedTrips,
                     onClearRecentTrips = viewModel::clearRecentTrips,
                 )
-                AppScreen.Settings -> SettingsScreen()
+                AppScreen.Settings -> SettingsScreen(
+                    darkModeEnabled = darkModeEnabled,
+                    onDarkModeChanged = onDarkModeChanged,
+                )
                 is AppScreen.StationSearch -> StationSearchScreen(
                     state = state,
                     mode = current.mode,
@@ -224,9 +226,9 @@ private fun BottomNavigationBar(
                 },
                 label = { Text(tab.label) },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = TransitBlue,
-                    selectedTextColor = TransitBlue,
-                    indicatorColor = TransitBlue.copy(alpha = 0.12f),
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),

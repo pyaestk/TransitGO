@@ -1,16 +1,16 @@
 package com.bangkoktransit.app.data.api
 
-import com.bangkoktransit.app.data.model.FareBreakdownItem
-import com.bangkoktransit.app.data.model.LineInfo
-import com.bangkoktransit.app.data.model.PathStats
-import com.bangkoktransit.app.data.model.PlaceGroup
-import com.bangkoktransit.app.data.model.PlaceInfo
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.RouteStation
-import com.bangkoktransit.app.data.model.RouteStep
-import com.bangkoktransit.app.data.model.RouteStepStation
-import com.bangkoktransit.app.data.model.Station
-import com.bangkoktransit.app.data.model.StationLite
+import com.bangkoktransit.app.domain.model.FareBreakdownItem
+import com.bangkoktransit.app.domain.model.LineInfo
+import com.bangkoktransit.app.domain.model.PathStats
+import com.bangkoktransit.app.domain.model.PlaceGroup
+import com.bangkoktransit.app.domain.model.PlaceInfo
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.RouteStation
+import com.bangkoktransit.app.domain.model.RouteStep
+import com.bangkoktransit.app.domain.model.RouteStepStation
+import com.bangkoktransit.app.domain.model.Station
+import com.bangkoktransit.app.domain.model.StationLite
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers

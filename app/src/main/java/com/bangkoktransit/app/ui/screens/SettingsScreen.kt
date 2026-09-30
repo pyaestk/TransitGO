@@ -4,6 +4,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Train
@@ -31,6 +33,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,16 +49,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitCoral
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitLine
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    darkModeEnabled: Boolean,
+    onDarkModeChanged: (Boolean) -> Unit,
+) {
     val versionName = rememberAppVersionName()
     var selectedDetail by rememberSaveable { mutableStateOf<SettingsDetail?>(null) }
 
@@ -63,20 +71,29 @@ fun SettingsScreen() {
             .fillMaxSize()
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         ScreenHeader(
             title = "Settings",
             subtitle = "Transit Go information",
         )
 
+        SettingsGroup(title = "Appearance") {
+            SettingsToggleRow(
+                icon = Icons.Filled.DarkMode,
+                title = "Dark mode",
+                value = darkModeEnabled,
+                onValueChange = onDarkModeChanged,
+            )
+        }
+
         SettingsGroup(title = "About") {
             SettingsRow(
                 icon = Icons.Filled.Info,
                 title = "About App",
                 value = "Transit Go",
-                tint = TransitBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 onClick = { selectedDetail = SettingsDetail.AboutApp },
             )
             SettingsDivider()
@@ -84,7 +101,7 @@ fun SettingsScreen() {
                 icon = Icons.Filled.Info,
                 title = "Version",
                 value = versionName,
-                tint = TransitBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 onClick = { selectedDetail = SettingsDetail.Version },
             )
         }
@@ -94,7 +111,7 @@ fun SettingsScreen() {
                 icon = Icons.Filled.Train,
                 title = "Data Credits",
                 value = "Sources",
-                tint = TransitGreen,
+                tint = MaterialTheme.colorScheme.secondary,
                 onClick = { selectedDetail = SettingsDetail.DataCredits },
             )
             SettingsDivider()
@@ -102,7 +119,7 @@ fun SettingsScreen() {
                 icon = Icons.Filled.AttachMoney,
                 title = "Fare Estimates",
                 value = "Approximate",
-                tint = TransitCoral,
+                tint = MaterialTheme.colorScheme.tertiary,
                 onClick = { selectedDetail = SettingsDetail.FareEstimates },
             )
         }
@@ -112,17 +129,10 @@ fun SettingsScreen() {
                 icon = Icons.Filled.Groups,
                 title = "Project Team",
                 value = "ICT Mahidol",
-                tint = TransitBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 onClick = { selectedDetail = SettingsDetail.ProjectTeam },
             )
         }
-
-        Text(
-            text = "This project is for academic and visualization purposes only.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        )
     }
 
     selectedDetail?.let { detail ->
@@ -143,15 +153,15 @@ private fun SettingsGroup(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = TransitBlue,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(16.dp),
             tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
+            shadowElevation = 1.dp,
         ) {
             Column(content = { content() })
         }
@@ -169,23 +179,23 @@ private fun SettingsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(64.dp)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            modifier = Modifier.size(26.dp),
-            color = tint.copy(alpha = 0.12f),
-            contentColor = tint,
-            shape = CircleShape,
+            modifier = Modifier.size(40.dp),
+            color = tint,
+            contentColor = Color.White,
+            shape = RoundedCornerShape(10.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -216,13 +226,69 @@ private fun SettingsRow(
 }
 
 @Composable
+private fun SettingsToggleRow(
+    icon: ImageVector,
+    title: String,
+    value: Boolean,
+    onValueChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .toggleable(
+                value = value,
+                role = Role.Switch,
+                onValueChange = onValueChange,
+            )
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Switch(
+            checked = value,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+            ),
+        )
+    }
+}
+
+@Composable
 private fun SettingsDivider() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 54.dp, end = 14.dp)
+            .padding(start = 70.dp, end = 14.dp)
             .height(1.dp)
-            .background(TransitLine),
+            .background(MaterialTheme.colorScheme.outline),
     )
 }
 
@@ -257,7 +323,6 @@ private fun SettingsDetailDialog(
                     SettingsDetail.Version -> {
                         DetailKeyValue(label = "App", value = "Transit Go")
                         DetailKeyValue(label = "Version", value = versionName)
-                        DetailParagraph(text = "Academic visualization project")
                     }
                     SettingsDetail.DataCredits -> {
                         DetailParagraph(text = "Transit information is referenced from publicly available data provided by:")
@@ -357,7 +422,7 @@ private fun DetailBulletList(items: List<String>) {
                     modifier = Modifier
                         .padding(top = 6.dp)
                         .size(5.dp),
-                    color = TransitBlue,
+                    color = MaterialTheme.colorScheme.primary,
                     shape = CircleShape,
                 ) {}
                 Spacer(modifier = Modifier.width(9.dp))

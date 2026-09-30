@@ -1,42 +1,43 @@
 package com.bangkoktransit.app.data.local
 
 import android.content.Context
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.SavedTrip
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.SavedTrip
+import com.bangkoktransit.app.domain.model.Station
+import com.bangkoktransit.app.domain.repository.SavedTripsRepository
 import org.json.JSONArray
 import org.json.JSONObject
 
-class TripStore(context: Context) {
+class TripStore(context: Context) : SavedTripsRepository {
     private val preferences = context.getSharedPreferences("transit_trips", Context.MODE_PRIVATE)
 
-    fun recentTrips(): List<SavedTrip> = readTrips(KEY_RECENT)
+    override fun recentTrips(): List<SavedTrip> = readTrips(KEY_RECENT)
 
-    fun savedTrips(): List<SavedTrip> = readTrips(KEY_SAVED)
+    override fun savedTrips(): List<SavedTrip> = readTrips(KEY_SAVED)
 
-    fun addRecent(from: Station, to: Station, route: RoutePath) {
+    override fun addRecent(from: Station, to: Station, route: RoutePath) {
         val trip = route.toTrip(from, to)
         val nextTrips = listOf(trip) + recentTrips().filterNot { it.key == trip.key }
         writeTrips(KEY_RECENT, nextTrips.take(MAX_RECENT))
     }
 
-    fun removeRecent(trip: SavedTrip) {
+    override fun removeRecent(trip: SavedTrip) {
         removeTrip(KEY_RECENT, trip)
     }
 
-    fun removeSaved(trip: SavedTrip) {
+    override fun removeSaved(trip: SavedTrip) {
         removeTrip(KEY_SAVED, trip)
     }
 
-    fun clearRecent() {
+    override fun clearRecent() {
         writeTrips(KEY_RECENT, emptyList())
     }
 
-    fun clearSaved() {
+    override fun clearSaved() {
         writeTrips(KEY_SAVED, emptyList())
     }
 
-    fun toggleSaved(from: Station, to: Station, route: RoutePath): Boolean {
+    override fun toggleSaved(from: Station, to: Station, route: RoutePath): Boolean {
         val trip = route.toTrip(from, to)
         val current = savedTrips()
         val exists = current.any { it.key == trip.key }
@@ -49,7 +50,7 @@ class TripStore(context: Context) {
         return !exists
     }
 
-    fun isSaved(from: Station?, to: Station?, route: RoutePath?): Boolean {
+    override fun isSaved(from: Station?, to: Station?, route: RoutePath?): Boolean {
         if (from == null || to == null || route == null) return false
         val key = route.toTrip(from, to).key
         return savedTrips().any { it.key == key }

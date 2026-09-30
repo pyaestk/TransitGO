@@ -1,6 +1,8 @@
 package com.bangkoktransit.app.ui.screens
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,23 +38,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.RouteStep
-import com.bangkoktransit.app.data.model.SavedTrip
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.RouteStep
+import com.bangkoktransit.app.domain.model.SavedTrip
+import com.bangkoktransit.app.domain.model.Station
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitCoral
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitLine
+import com.transitgo.app.R
 import java.util.Locale
 
-private val CardShape = RoundedCornerShape(8.dp)
-private val ControlShape = RoundedCornerShape(8.dp)
-private val TransitInkButton = Color(0xFF14211F)
+private val CardShape = RoundedCornerShape(16.dp)
+private val ControlShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun ScreenHeader(
@@ -72,7 +78,7 @@ fun ScreenHeader(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -125,9 +131,12 @@ fun TransitCard(
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, tint?.copy(alpha = 0.22f) ?: TransitLine),
+//        border = BorderStroke(
+//            1.dp,
+//            tint?.copy(alpha = 0.32f) ?: MaterialTheme.colorScheme.outline,
+//        ),
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+        shadowElevation = 1.dp,
         shape = CardShape,
         content = content,
     )
@@ -142,7 +151,7 @@ fun EmptyStateCard(
 ) {
     TransitCard(modifier = Modifier.fillMaxWidth(), tint = TransitCoral) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
@@ -211,13 +220,14 @@ fun StationRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(CardShape)
+            .defaultMinSize(minHeight = 72.dp)
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, TransitLine),
+//        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shape = CardShape,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -225,26 +235,41 @@ fun StationRow(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StationCodeBadge(
-                    code = station.displayCode,
-                    color = lineColorForName(station.line?.nameEn),
+                val lineColor = lineColorForName(station.line?.nameEn)
+                TransitLineLogo(
+                    lineName = station.line?.nameEn,
+                    size = 40.dp,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(
                         text = station.nameEn,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = station.line?.nameEn ?: "Transit line",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = station.line?.nameEn ?: "Transit line",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+                CompactMetric(
+                    text = station.displayCode,
+                    tint = lineColor,
+                )
             }
             if (trailing != null) {
                 Spacer(modifier = Modifier.width(10.dp))
@@ -261,14 +286,14 @@ fun StationCodeBadge(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.defaultMinSize(minWidth = 36.dp, minHeight = 30.dp),
+        modifier = modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
         color = color.copy(alpha = 0.12f),
         contentColor = color,
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, color.copy(alpha = 0.28f)),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -280,6 +305,42 @@ fun StationCodeBadge(
         }
     }
 }
+
+@Composable
+fun TransitLineLogo(
+    lineName: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 28.dp,
+) {
+    val lineColor = lineColorForName(lineName)
+    val logoResource = lineLogoResourceForName(lineName)
+
+    Surface(
+        modifier = modifier.size(size),
+        color = Color.White,
+        contentColor = lineColor,
+        shape = RoundedCornerShape(size * 0.24f),
+        border = BorderStroke(1.dp, lineColor.copy(alpha = 0.3f)),
+    ) {
+        if (logoResource != null) {
+            Image(
+                painter = painterResource(logoResource),
+                contentDescription = null,
+                modifier = Modifier.padding(size * 0.12f),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Train,
+                    contentDescription = null,
+                    modifier = Modifier.size(size * 0.58f),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun RouteOptionRow(
     route: RoutePath,
@@ -287,18 +348,27 @@ fun RouteOptionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (isSelected) TransitBlue else TransitLine
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(CardShape)
+            .defaultMinSize(minHeight = 104.dp)
             .clickable(onClick = onClick),
-        color = if (isSelected) TransitBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         border = BorderStroke(1.dp, borderColor),
         shape = CardShape,
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
@@ -342,7 +412,7 @@ fun TripRow(
             .clip(CardShape)
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, TransitLine),
+//        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shape = CardShape,
     ) {
         Row(
@@ -355,22 +425,21 @@ fun TripRow(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     CompactMetric(trip.routeType.displayPathType(), tint = TransitBlue)
                     Text(
                         text = trip.fareTotal.formatFare(),
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         color = TransitGreen,
                         fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(start = 10.dp),
                     )
                 }
                 Text(
                     text = "${trip.fromName} to ${trip.toName}",
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
@@ -394,13 +463,18 @@ fun CompactMetric(
     tint: Color = MaterialTheme.colorScheme.surfaceVariant,
 ) {
     val usesDefaultTint = tint == MaterialTheme.colorScheme.surfaceVariant
+    val readableTint = if (!usesDefaultTint && MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+        lerp(tint, Color.White, 0.36f)
+    } else {
+        tint
+    }
     Surface(
         modifier = modifier,
         color = tint.copy(alpha = if (usesDefaultTint) 0.72f else 0.12f),
         contentColor = if (usesDefaultTint) {
             MaterialTheme.colorScheme.onSurfaceVariant
         } else {
-            tint
+            readableTint
         },
         shape = RoundedCornerShape(8.dp),
     ) {
@@ -428,7 +502,7 @@ fun RouteStepsTimeline(
             modifier = modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
             shape = CardShape,
-            border = BorderStroke(1.dp, TransitLine),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         ) {
             Text(
                 text = "No step details for this route yet.",
@@ -635,11 +709,9 @@ private fun RouteLinePill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(width = if (compact) 16.dp else 18.dp, height = if (compact) 5.dp else 6.dp)
-                    .clip(CircleShape)
-                    .background(color),
+            TransitLineLogo(
+                lineName = lineName,
+                size = if (compact) 18.dp else 20.dp,
             )
             Text(
                 text = lineName,
@@ -662,10 +734,10 @@ fun PrimaryActionButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 40.dp),
+        modifier = modifier.defaultMinSize(minHeight = 48.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = TransitInkButton,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
@@ -673,8 +745,8 @@ fun PrimaryActionButton(
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
     ) {
         if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(17.dp))
-            Spacer(modifier = Modifier.width(7.dp))
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
         }
         Text(text = text, fontWeight = FontWeight.SemiBold)
     }
@@ -691,17 +763,17 @@ fun QuietActionButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 32.dp),
+        modifier = modifier.defaultMinSize(minHeight = 48.dp),
         shape = ControlShape,
-        border = BorderStroke(1.dp, TransitLine),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
     ) {
         if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(17.dp))
-            Spacer(modifier = Modifier.width(5.dp))
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(6.dp))
         }
         Text(text = text)
     }
@@ -716,22 +788,33 @@ fun IconActionButton(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val tint = if (selected) TransitBlue else MaterialTheme.colorScheme.onSurface
+    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Surface(
         modifier = modifier
-            .size(40.dp)
+            .size(48.dp)
             .clip(ControlShape)
             .clickable(enabled = enabled, onClick = onClick),
-        color = if (selected) TransitBlue.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         contentColor = if (enabled) tint else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f),
         shape = ControlShape,
-        border = BorderStroke(1.dp, if (selected) TransitBlue.copy(alpha = 0.32f) else TransitLine),
+        border = BorderStroke(
+            1.dp,
+            if (selected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
+            } else {
+                MaterialTheme.colorScheme.outline
+            },
+        ),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }
@@ -753,6 +836,24 @@ fun lineColorForName(name: String?): Color {
         name.contains("Dark Red", ignoreCase = true) -> Color(0xFFC1272D)
         name.contains("Red", ignoreCase = true) -> Color(0xFFC1272D)
         else -> TransitCoral
+    }
+}
+
+@DrawableRes
+fun lineLogoResourceForName(name: String?): Int? {
+    return when {
+        name == null -> null
+        name.contains("Sukhumvit", ignoreCase = true) -> R.drawable.line_bts_sukhumvit
+        name.contains("Silom", ignoreCase = true) -> R.drawable.line_bts_silom
+        name.contains("Gold", ignoreCase = true) -> R.drawable.line_bts_gold
+        name.contains("Blue", ignoreCase = true) -> R.drawable.line_mrt_blue
+        name.contains("Purple", ignoreCase = true) -> R.drawable.line_mrt_purple
+        name.contains("Yellow", ignoreCase = true) -> R.drawable.line_mrt_yellow
+        name.contains("Pink", ignoreCase = true) -> R.drawable.line_mrt_pink
+        name.contains("Airport", ignoreCase = true) -> R.drawable.line_airport_rail_link
+        name.contains("Light Red", ignoreCase = true) -> R.drawable.line_srt_light_red
+        name.contains("Dark Red", ignoreCase = true) -> R.drawable.line_srt_dark_red
+        else -> null
     }
 }
 

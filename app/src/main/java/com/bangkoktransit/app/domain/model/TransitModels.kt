@@ -1,4 +1,4 @@
-package com.bangkoktransit.app.data.model
+package com.bangkoktransit.app.domain.model
 
 data class LineInfo(
     val id: Int,

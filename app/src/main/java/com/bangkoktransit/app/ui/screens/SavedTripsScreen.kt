@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,10 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bangkoktransit.app.data.model.SavedTrip
+import com.bangkoktransit.app.domain.model.SavedTrip
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitLine
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
 
 private enum class TripTab(
@@ -74,8 +73,8 @@ fun SavedTripsScreen(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 0.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ScreenHeader(
             title = "Trips",
@@ -93,8 +92,11 @@ fun SavedTripsScreen(
             },
         )
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(TripTab.entries) { tab ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TripTab.entries.forEach { tab ->
                 TripTabChip(
                     tab = tab,
                     count = when (tab) {
@@ -102,6 +104,7 @@ fun SavedTripsScreen(
                         TripTab.Recent -> state.recentTrips.size
                     },
                     selected = selectedTab == tab,
+                    modifier = Modifier.weight(1f),
                     onClick = { selectedTab = tab },
                 )
             }
@@ -121,8 +124,8 @@ fun SavedTripsScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
             ) {
                 items(
                     items = trips,
@@ -184,20 +187,26 @@ private fun TripTabChip(
     tab: TripTab,
     count: Int,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val tint = if (tab == TripTab.Saved) TransitBlue else TransitGreen
     Surface(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         color = if (selected) tint else MaterialTheme.colorScheme.surface,
         contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, if (selected) tint else TransitLine),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            1.dp,
+            if (selected) tint else MaterialTheme.colorScheme.outline,
+        ),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {

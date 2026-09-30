@@ -31,11 +31,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bangkoktransit.app.data.model.PlaceGroup
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.PlaceGroup
+import com.bangkoktransit.app.domain.model.Station
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitSoftGreen
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
 
 @Composable
@@ -112,7 +111,11 @@ fun StationDetailScreen(
         }
 
         if (placeGroup != null) {
-            PlaceGroupCard(placeGroup = placeGroup, currentStation = station)
+            PlaceGroupCard(
+                placeGroup = placeGroup,
+                currentStation = station,
+                allStations = state.stations,
+            )
         }
     }
 }
@@ -130,9 +133,9 @@ private fun StationSummaryCard(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StationCodeBadge(
-                code = station.displayCode,
-                color = lineColor,
+            TransitLineLogo(
+                lineName = station.line?.nameEn,
+                size = 52.dp,
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column(
@@ -145,13 +148,18 @@ private fun StationSummaryCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = station.line?.nameEn ?: "Transit line",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = station.line?.nameEn ?: "Transit line",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CompactMetric(station.stationCode, tint = lineColor)
                     CompactMetric(
@@ -178,6 +186,7 @@ private fun StationSummaryCard(
 private fun PlaceGroupCard(
     placeGroup: PlaceGroup,
     currentStation: Station,
+    allStations: List<Station>,
 ) {
     val relatedStations = placeGroup.stations.filter { it.stationCode != currentStation.stationCode }
     if (relatedStations.isEmpty()) return
@@ -189,11 +198,15 @@ private fun PlaceGroupCard(
         ) {
             SectionTitle(text = "Transfers")
             relatedStations.forEach { station ->
+                val lineName = allStations
+                    .firstOrNull { it.stationCode == station.stationCode }
+                    ?.line
+                    ?.nameEn
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(TransitSoftGreen)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
                         .padding(10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
@@ -202,11 +215,9 @@ private fun PlaceGroupCard(
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(TransitGreen),
+                        TransitLineLogo(
+                            lineName = lineName,
+                            size = 30.dp,
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {

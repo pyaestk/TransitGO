@@ -5,8 +5,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.BorderStroke
@@ -20,6 +18,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,15 +53,22 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -87,19 +93,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.transitgo.app.R
-import com.bangkoktransit.app.data.model.RoutePath
-import com.bangkoktransit.app.data.model.RouteStation
-import com.bangkoktransit.app.data.model.Station
+import com.bangkoktransit.app.domain.model.RoutePath
+import com.bangkoktransit.app.domain.model.RouteStation
+import com.bangkoktransit.app.domain.model.Station
 import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitCoral
 import com.bangkoktransit.app.ui.theme.TransitGreen
-import com.bangkoktransit.app.ui.theme.TransitInk
-import com.bangkoktransit.app.ui.theme.TransitLine
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
+import kotlinx.coroutines.launch
 
 private const val MapMotionFastMillis = 160
 private const val MapMotionMediumMillis = 260
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     state: TransitUiState,
@@ -111,20 +117,38 @@ fun MapScreen(
     onPlanRoute: () -> Unit,
     onSelectRoute: (RoutePath) -> Unit,
     onClearRoute: () -> Unit,
+    sheetExpanded: Boolean,
+    onSheetExpandedChange: (Boolean) -> Unit,
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var stationForDialog by remember { mutableStateOf<Station?>(null) }
     var showRouteSteps by rememberSaveable { mutableStateOf(false) }
-    var showRouteSheet by rememberSaveable { mutableStateOf(true) }
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = if (sheetExpanded) SheetValue.Expanded else SheetValue.PartiallyExpanded,
+        skipHiddenState = true,
+    )
+    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+    val sheetScope = rememberCoroutineScope()
 
-    LaunchedEffect(
-        state.activeRoute?.routeKey,
-        state.selectedStart?.stationCode,
-        state.selectedTarget?.stationCode,
-    ) {
-        showRouteSheet = true
+    LaunchedEffect(sheetExpanded) {
+        val currentlyExpanded = sheetState.currentValue == SheetValue.Expanded
+        if (sheetExpanded != currentlyExpanded) {
+            if (sheetExpanded) {
+                sheetState.expand()
+            } else {
+                sheetState.partialExpand()
+            }
+        }
+    }
+
+    LaunchedEffect(sheetState.currentValue) {
+        when (sheetState.currentValue) {
+            SheetValue.Expanded -> onSheetExpandedChange(true)
+            SheetValue.PartiallyExpanded -> onSheetExpandedChange(false)
+            SheetValue.Hidden -> Unit
+        }
     }
 
     fun clampedOffset(proposedOffset: Offset, targetScale: Float): Offset {
@@ -137,8 +161,11 @@ fun MapScreen(
         val drawnHeight = mapGeometry.heightPx * targetScale.coerceAtLeast(1f)
 
         fun clampAxis(value: Float, viewport: Float, base: Float, drawnSize: Float): Float {
-            val min = viewport - base - drawnSize
-            val max = -base
+            // Keep half a viewport of pan space around the map so either edge can
+            // be brought to the center instead of stopping at the screen edge.
+            val center = viewport * MAP_EDGE_CENTERING_FRACTION
+            val min = center - base - drawnSize
+            val max = center - base
             return value.coerceIn(minOf(min, max), maxOf(min, max))
         }
 
@@ -153,72 +180,52 @@ fun MapScreen(
         offset = Offset.Zero
     }
 
+    fun offsetForZoom(nextScale: Float, focalPoint: Offset): Offset {
+        if (viewportSize.width <= 0 || viewportSize.height <= 0) return offset
+
+        val mapGeometry = fittedMapGeometry(
+            viewportWidth = viewportSize.width.toFloat(),
+            viewportHeight = viewportSize.height.toFloat(),
+        )
+        val focalPointInMap = Offset(
+            x = focalPoint.x - mapGeometry.baseX,
+            y = focalPoint.y - mapGeometry.baseY,
+        )
+        val scaleRatio = nextScale / scale
+        return focalPointInMap + (offset - focalPointInMap) * scaleRatio
+    }
+
+    fun zoomAt(nextScale: Float, focalPoint: Offset) {
+        val boundedScale = nextScale.coerceIn(1f, 5f)
+        val nextOffset = offsetForZoom(boundedScale, focalPoint)
+        scale = boundedScale
+        offset = clampedOffset(nextOffset, boundedScale)
+    }
+
+    fun viewportCenter(): Offset = Offset(
+        x = viewportSize.width / 2f,
+        y = viewportSize.height / 2f,
+    )
+
     fun zoomIn() {
-        val nextScale = (scale * 1.22f).coerceAtMost(5f)
-        scale = nextScale
-        offset = clampedOffset(offset, nextScale)
+        zoomAt(scale * 1.22f, viewportCenter())
     }
 
     fun zoomOut() {
-        val nextScale = (scale / 1.22f).coerceAtLeast(1f)
-        scale = nextScale
-        offset = clampedOffset(offset, nextScale)
+        zoomAt(scale / 1.22f, viewportCenter())
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onSizeChanged { viewportSize = it }
-            .background(Color.White),
-    ) {
-        RouteMapCanvas(
-            stations = state.stations,
-            route = state.activeRoute,
-            startStation = state.selectedStart,
-            targetStation = state.selectedTarget,
-            scale = scale,
-            offset = offset,
-            onGesture = { pan, zoomChange ->
-                val nextScale = (scale * zoomChange).coerceIn(1f, 5f)
-                scale = nextScale
-                offset = clampedOffset(offset + pan, nextScale)
-            },
-            onStationTap = { stationForDialog = it },
-            modifier = Modifier.fillMaxSize(),
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 14.dp, end = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MapControlButton(icon = Icons.Filled.Add, onClick = ::zoomIn)
-            MapControlButton(icon = Icons.Filled.Remove, onClick = ::zoomOut)
-            MapControlButton(icon = Icons.Filled.CenterFocusStrong, onClick = ::resetMap)
-        }
-
-        AnimatedVisibility(
-            visible = showRouteSheet,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            enter = slideInVertically(
-                initialOffsetY = { it / 3 },
-                animationSpec = tween(
-                    durationMillis = MapMotionMediumMillis,
-                    easing = FastOutSlowInEasing,
-                ),
-            ) + fadeIn(animationSpec = tween(durationMillis = MapMotionFastMillis)),
-            exit = slideOutVertically(
-                targetOffsetY = { it / 3 },
-                animationSpec = tween(
-                    durationMillis = MapMotionMediumMillis,
-                    easing = FastOutSlowInEasing,
-                ),
-            ) + fadeOut(animationSpec = tween(durationMillis = MapMotionFastMillis)),
-        ) {
+    BottomSheetScaffold(
+        modifier = Modifier.fillMaxSize(),
+        scaffoldState = scaffoldState,
+        sheetPeekHeight = 104.dp,
+        sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        sheetContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+        sheetContentColor = MaterialTheme.colorScheme.onSurface,
+        sheetTonalElevation = 0.dp,
+        sheetShadowElevation = 8.dp,
+        sheetDragHandle = { BottomSheetDefaults.DragHandle() },
+        sheetContent = {
             RouteMapSheet(
                 state = state,
                 onOpenPlanner = onOpenPlanner,
@@ -230,55 +237,85 @@ fun MapScreen(
                     showRouteSteps = false
                     onClearRoute()
                 },
-                onHideSheet = { showRouteSheet = false },
+                isExpanded = sheetState.currentValue == SheetValue.Expanded,
+                onToggleSheet = {
+                    sheetScope.launch {
+                        if (sheetState.currentValue == SheetValue.Expanded) {
+                            sheetState.partialExpand()
+                        } else {
+                            sheetState.expand()
+                        }
+                    }
+                },
                 showRouteSteps = showRouteSteps,
                 onToggleRouteSteps = { showRouteSteps = !showRouteSteps },
-                modifier = Modifier,
             )
-        }
-
-        AnimatedVisibility(
-            visible = !showRouteSheet,
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { _ ->
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            enter = slideInVertically(
-                initialOffsetY = { it / 2 },
-                animationSpec = tween(
-                    durationMillis = MapMotionMediumMillis,
-                    easing = FastOutSlowInEasing,
-                ),
-            ) + fadeIn(animationSpec = tween(durationMillis = MapMotionFastMillis)),
-            exit = slideOutVertically(
-                targetOffsetY = { it / 2 },
-                animationSpec = tween(
-                    durationMillis = MapMotionMediumMillis,
-                    easing = FastOutSlowInEasing,
-                ),
-            ) + fadeOut(animationSpec = tween(durationMillis = MapMotionFastMillis)),
+                .fillMaxSize()
+                .onSizeChanged { viewportSize = it }
+                .background(MaterialTheme.colorScheme.background),
         ) {
-            RouteMapSheetChip(
-                state = state,
-                onClick = { showRouteSheet = true },
-                modifier = Modifier,
+            RouteMapCanvas(
+                stations = state.stations,
+                route = state.activeRoute,
+                startStation = state.selectedStart,
+                targetStation = state.selectedTarget,
+                scale = scale,
+                offset = offset,
+                onGesture = { centroid, pan, zoomChange ->
+                    val nextScale = (scale * zoomChange).coerceIn(1f, 5f)
+                    val zoomedOffset = offsetForZoom(nextScale, centroid)
+                    scale = nextScale
+                    offset = clampedOffset(zoomedOffset + pan, nextScale)
+                },
+                onStationTap = { stationForDialog = it },
+                modifier = Modifier.fillMaxSize(),
             )
-        }
 
-        stationForDialog?.let { station ->
-            MapStationDialog(
-                station = station,
-                isStart = station.stationCode == state.selectedStart?.stationCode,
-                isTarget = station.stationCode == state.selectedTarget?.stationCode,
-                onSetStart = {
-                    onSetStart(station)
-                    stationForDialog = null
-                },
-                onSetTarget = {
-                    onSetTarget(station)
-                    stationForDialog = null
-                },
-                onDismiss = { stationForDialog = null },
-            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 14.dp, end = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MapControlButton(
+                    icon = Icons.Filled.Add,
+                    contentDescription = "Zoom in",
+                    onClick = ::zoomIn,
+                )
+                MapControlButton(
+                    icon = Icons.Filled.Remove,
+                    contentDescription = "Zoom out",
+                    onClick = ::zoomOut,
+                )
+                MapControlButton(
+                    icon = Icons.Filled.CenterFocusStrong,
+                    contentDescription = "Reset map",
+                    onClick = ::resetMap,
+                )
+            }
+
+            stationForDialog?.let { station ->
+                MapStationDialog(
+                    station = station,
+                    isStart = station.stationCode == state.selectedStart?.stationCode,
+                    isTarget = station.stationCode == state.selectedTarget?.stationCode,
+                    onSetStart = {
+                        onSetStart(station)
+                        stationForDialog = null
+                    },
+                    onSetTarget = {
+                        onSetTarget(station)
+                        stationForDialog = null
+                    },
+                    onDismiss = { stationForDialog = null },
+                )
+            }
         }
     }
 }
@@ -292,7 +329,8 @@ private fun RouteMapSheet(
     onPlanRoute: () -> Unit,
     onSelectRoute: (RoutePath) -> Unit,
     onClearRoute: () -> Unit,
-    onHideSheet: () -> Unit,
+    isExpanded: Boolean,
+    onToggleSheet: () -> Unit,
     showRouteSteps: Boolean,
     onToggleRouteSteps: () -> Unit,
     modifier: Modifier = Modifier,
@@ -307,113 +345,145 @@ private fun RouteMapSheet(
         state.selectedTarget != null &&
         !state.isPlanningRoute &&
         !state.isLoadingStations
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, TransitLine),
-        shadowElevation = 2.dp,
+    val sheetSubtitle = when {
+        activeRoute != null -> {
+            "${activeRoute.stats.totalStations} stations / ${activeRoute.stats.totalTransfers} transfers"
+        }
+        state.selectedStart != null && state.selectedTarget != null -> {
+            "${state.selectedStart.displayCode} to ${state.selectedTarget.displayCode}"
+        }
+        state.selectedStart != null -> "From ${state.selectedStart.displayCode}"
+        state.selectedTarget != null -> "To ${state.selectedTarget.displayCode}"
+        else -> "Choose stations"
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = activeRoute?.displayName() ?: "Route map",
-                    modifier = Modifier.weight(1f),
+                    text = activeRoute?.displayName()
+                        ?: if (isExpanded) "Route map" else "Route details",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (activeRoute != null) {
-                    Text(
-                        text = activeRoute.fareTotal.formatFare(),
-                        modifier = Modifier.padding(start = 10.dp),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TransitGreen,
-                        maxLines = 1,
-                    )
-                }
-                IconActionButton(
-                    icon = Icons.Filled.ExpandMore,
-                    contentDescription = "Hide route details",
-                    modifier = Modifier.padding(start = 8.dp),
-                    onClick = onHideSheet,
+                Text(
+                    text = sheetSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (canClear) {
-                    IconActionButton(
-                        icon = Icons.Filled.Clear,
-                        contentDescription = "Clear result",
-                        modifier = Modifier.padding(start = 8.dp),
-                        onClick = onClearRoute,
-                    )
-                }
+            }
+            if (activeRoute != null) {
+                Text(
+                    text = activeRoute.fareTotal.formatFare(),
+                    modifier = Modifier.padding(start = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TransitGreen,
+                    maxLines = 1,
+                )
+            }
+            IconActionButton(
+                icon = if (isExpanded) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                contentDescription = if (isExpanded) {
+                    "Collapse route details"
+                } else {
+                    "Expand route details"
+                },
+                modifier = Modifier.padding(start = 8.dp),
+                onClick = onToggleSheet,
+            )
+            if (isExpanded && canClear) {
+                IconActionButton(
+                    icon = Icons.Filled.Clear,
+                    contentDescription = "Clear result",
+                    modifier = Modifier.padding(start = 8.dp),
+                    onClick = onClearRoute,
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            RouteEndpointChip(
+                label = "From",
+                station = state.selectedStart,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+                onClick = onChooseStart,
+            )
+            RouteEndpointChip(
+                label = "To",
+                station = state.selectedTarget,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.weight(1f),
+                onClick = onChooseTarget,
+            )
+        }
+
+        if (activeRoute == null) {
+            PrimaryActionButton(
+                text = if (state.isPlanningRoute) "Planning route" else "Plan route",
+                enabled = canPlan,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                icon = Icons.Filled.Route,
+                onClick = onPlanRoute,
+            )
+        } else {
+            if (state.routeOptions.size > 1) {
+                MapRouteOptionsStrip(
+                    routes = state.routeOptions,
+                    selectedRoute = activeRoute,
+                    onSelectRoute = onSelectRoute,
+                )
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                RouteEndpointChip(
-                    label = "From",
-                    station = state.selectedStart,
-                    tint = TransitBlue,
+                Text(
+                    text = sheetSubtitle,
                     modifier = Modifier.weight(1f),
-                    onClick = onChooseStart,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                RouteEndpointChip(
-                    label = "To",
-                    station = state.selectedTarget,
-                    tint = TransitCoral,
-                    modifier = Modifier.weight(1f),
-                    onClick = onChooseTarget,
+                QuietActionButton(
+                    text = "Edit trip",
+                    icon = Icons.Filled.Route,
+                    modifier = Modifier.padding(start = 8.dp),
+                    onClick = onOpenPlanner,
                 )
             }
 
-            if (activeRoute == null) {
-                PrimaryActionButton(
-                    text = if (state.isPlanningRoute) "Planning route" else "Plan route",
-                    enabled = canPlan,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Filled.Route,
-                    onClick = onPlanRoute,
-                )
-            } else {
-                if (state.routeOptions.size > 1) {
-                    MapRouteOptionsStrip(
-                        routes = state.routeOptions,
-                        selectedRoute = activeRoute,
-                        onSelectRoute = onSelectRoute,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "${activeRoute.stats.totalStations} stations / ${activeRoute.stats.totalTransfers} transfers",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    QuietActionButton(
-                        text = "Edit trip",
-                        icon = Icons.Filled.Route,
-                        modifier = Modifier.padding(start = 8.dp),
-                        onClick = onOpenPlanner,
-                    )
-                }
-
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 RouteStepsDropdown(
                     route = activeRoute,
                     stations = state.stations,
@@ -421,16 +491,17 @@ private fun RouteMapSheet(
                     onToggleSteps = onToggleRouteSteps,
                 )
             }
+        }
 
-            if (state.routeError != null) {
-                Text(
-                    text = state.routeError,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        if (state.routeError != null) {
+            Text(
+                text = state.routeError,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -458,12 +529,15 @@ private fun MapRouteOptionsStrip(
     ) {
         Text(
             text = "Route options",
+            modifier = Modifier.padding(horizontal = 16.dp),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
         LazyRow(
             state = listState,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(
@@ -486,7 +560,11 @@ private fun MapRouteOptionCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val borderColor = if (selected) TransitBlue else TransitLine
+    val borderColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
     val cardScale by animateFloatAsState(
         targetValue = if (selected) 1f else 0.97f,
         animationSpec = spring(
@@ -507,10 +585,14 @@ private fun MapRouteOptionCard(
                 scaleX = cardScale
                 scaleY = cardScale
             }
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
-        color = if (selected) TransitBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(8.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(borderWidth, borderColor),
     ) {
         Column(
@@ -546,75 +628,6 @@ private fun MapRouteOptionCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-@Composable
-private fun RouteMapSheetChip(
-    state: TransitUiState,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val activeRoute = state.activeRoute
-    val title = activeRoute?.displayName() ?: "Route details"
-    val subtitle = when {
-        activeRoute != null -> {
-            "${activeRoute.stats.totalStations} stations / ${activeRoute.stats.totalTransfers} transfers"
-        }
-        state.selectedStart != null && state.selectedTarget != null -> {
-            "${state.selectedStart.displayCode} to ${state.selectedTarget.displayCode}"
-        }
-        state.selectedStart != null -> "From ${state.selectedStart.displayCode}"
-        state.selectedTarget != null -> "To ${state.selectedTarget.displayCode}"
-        else -> "Choose stations"
-    }
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, TransitLine),
-        shadowElevation = 2.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.ExpandLess,
-                contentDescription = null,
-                tint = TransitInk,
-                modifier = Modifier.size(20.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (activeRoute != null) {
-                Text(
-                    text = activeRoute.fareTotal.formatFare(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TransitGreen,
-                    maxLines = 1,
-                )
-            }
         }
     }
 }
@@ -680,10 +693,17 @@ private fun RouteEndpointChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StationCodeBadge(
-                code = station?.displayCode ?: label.take(1),
-                color = tint,
-            )
+            if (station != null) {
+                TransitLineLogo(
+                    lineName = station.line?.nameEn,
+                    size = 48.dp,
+                )
+            } else {
+                StationCodeBadge(
+                    code = label.take(1),
+                    color = tint,
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
@@ -698,6 +718,25 @@ private fun RouteEndpointChip(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (station != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = station.line?.nameEn ?: "Transit line",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        CompactMetric(
+                            text = station.displayCode,
+                            tint = lineColorForName(station.line?.nameEn),
+                        )
+                    }
+                }
             }
         }
     }
@@ -717,7 +756,7 @@ private fun MapStationDialog(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, TransitLine),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             shadowElevation = 4.dp,
         ) {
             Column(
@@ -729,9 +768,9 @@ private fun MapStationDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    StationCodeBadge(
-                        code = station.displayCode,
-                        color = lineColorForName(station.line?.nameEn),
+                    TransitLineLogo(
+                        lineName = station.line?.nameEn,
+                        size = 48.dp,
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -741,13 +780,23 @@ private fun MapStationDialog(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            text = station.line?.nameEn ?: station.stationCode,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = station.line?.nameEn ?: station.stationCode,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            CompactMetric(
+                                text = station.displayCode,
+                                tint = lineColorForName(station.line?.nameEn),
+                            )
+                        }
                     }
                 }
 
@@ -757,14 +806,14 @@ private fun MapStationDialog(
                 ) {
                     StationDialogAction(
                         text = if (isStart) "From selected" else "Set From",
-                        tint = TransitBlue,
+                        tint = MaterialTheme.colorScheme.primary,
                         selected = isStart,
                         modifier = Modifier.weight(1f),
                         onClick = onSetStart,
                     )
                     StationDialogAction(
                         text = if (isTarget) "To selected" else "Set To",
-                        tint = TransitCoral,
+                        tint = MaterialTheme.colorScheme.tertiary,
                         selected = isTarget,
                         modifier = Modifier.weight(1f),
                         onClick = onSetTarget,
@@ -820,7 +869,7 @@ private fun RouteMapCanvas(
     targetStation: Station?,
     scale: Float,
     offset: Offset,
-    onGesture: (pan: Offset, zoomChange: Float) -> Unit,
+    onGesture: (centroid: Offset, pan: Offset, zoomChange: Float) -> Unit,
     onStationTap: (Station) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -829,7 +878,7 @@ private fun RouteMapCanvas(
 
     BoxWithConstraints(
         modifier = modifier
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.background)
             .clipToBounds()
             .pointerInput(stations, scale, offset) {
                 detectTapGestures { tapOffset ->
@@ -845,14 +894,16 @@ private fun RouteMapCanvas(
                 }
             }
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoomChange, _ ->
-                    currentOnGesture(pan, zoomChange)
+                detectTransformGestures { centroid, pan, zoomChange, _ ->
+                    currentOnGesture(centroid, pan, zoomChange)
                 }
             },
     ) {
-        val mapSize = fittedMapSize(maxWidth, maxHeight)
-        val mapOffsetX = (maxWidth - mapSize.width) / 2f
-        val mapOffsetY = (maxHeight - mapSize.height) / 2f
+        val availableWidth = this.maxWidth
+        val availableHeight = this.maxHeight
+        val mapSize = fittedMapSize(availableWidth, availableHeight)
+        val mapOffsetX = (availableWidth - mapSize.width) / 2f
+        val mapOffsetY = (availableHeight - mapSize.height) / 2f
 
         Box(
             modifier = Modifier
@@ -864,7 +915,8 @@ private fun RouteMapCanvas(
                     scaleY = scale
                     translationX = offset.x
                     translationY = offset.y
-                },
+                }
+                .background(Color.White),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.bangkok_transit_map),
@@ -1092,21 +1144,26 @@ private fun MapMarker(
 @Composable
 private fun MapControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(48.dp)
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        contentColor = TransitInk,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, TransitLine),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shadowElevation = 2.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(19.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -1201,4 +1258,5 @@ private const val MAP_HEIGHT = 841.89
 private const val MAP_BITMAP_WIDTH = 1959f
 private const val MAP_BITMAP_HEIGHT = 2048f
 private const val MAP_IMAGE_ASPECT_RATIO = MAP_BITMAP_HEIGHT / MAP_BITMAP_WIDTH
+private const val MAP_EDGE_CENTERING_FRACTION = 0.5f
 private const val ROUTE_BACKGROUND_DIM_ALPHA = 0.24f
