@@ -4,6 +4,15 @@ Transit Go is an Android app for exploring Bangkok's urban rail network and plan
 
 ## Screen previews
 
+### Route results
+
+<p align="center">
+  <img src="docs/screenshots/planner-results.png" width="280" alt="Planner with route options and journey details" />
+  <img src="docs/screenshots/map-results.png" width="280" alt="Map showing the selected route and route summary sheet" />
+</p>
+
+### Main screens
+
 <p align="center">
   <img src="docs/screenshots/planner.png" width="180" alt="Planner screen" />
   <img src="docs/screenshots/map.png" width="180" alt="Map screen" />
