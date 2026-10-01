@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,14 +67,17 @@ fun SettingsScreen(
     val versionName = rememberAppVersionName()
     var selectedDetail by rememberSaveable { mutableStateOf<SettingsDetail?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .width(maxWidth.coerceAtMost(820.dp))
+                .align(Alignment.TopCenter)
+                .fillMaxSize()
+                .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
         ScreenHeader(
             title = "Settings",
             subtitle = "Transit Go information",
@@ -132,6 +136,7 @@ fun SettingsScreen(
                 tint = MaterialTheme.colorScheme.primary,
                 onClick = { selectedDetail = SettingsDetail.ProjectTeam },
             )
+        }
         }
     }
 

@@ -226,30 +226,35 @@ fun MapScreen(
         sheetShadowElevation = 8.dp,
         sheetDragHandle = { BottomSheetDefaults.DragHandle() },
         sheetContent = {
-            RouteMapSheet(
-                state = state,
-                onOpenPlanner = onOpenPlanner,
-                onChooseStart = onChooseStart,
-                onChooseTarget = onChooseTarget,
-                onPlanRoute = onPlanRoute,
-                onSelectRoute = onSelectRoute,
-                onClearRoute = {
-                    showRouteSteps = false
-                    onClearRoute()
-                },
-                isExpanded = sheetState.currentValue == SheetValue.Expanded,
-                onToggleSheet = {
-                    sheetScope.launch {
-                        if (sheetState.currentValue == SheetValue.Expanded) {
-                            sheetState.partialExpand()
-                        } else {
-                            sheetState.expand()
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                RouteMapSheet(
+                    state = state,
+                    onOpenPlanner = onOpenPlanner,
+                    onChooseStart = onChooseStart,
+                    onChooseTarget = onChooseTarget,
+                    onPlanRoute = onPlanRoute,
+                    onSelectRoute = onSelectRoute,
+                    onClearRoute = {
+                        showRouteSteps = false
+                        onClearRoute()
+                    },
+                    isExpanded = sheetState.currentValue == SheetValue.Expanded,
+                    onToggleSheet = {
+                        sheetScope.launch {
+                            if (sheetState.currentValue == SheetValue.Expanded) {
+                                sheetState.partialExpand()
+                            } else {
+                                sheetState.expand()
+                            }
                         }
-                    }
-                },
-                showRouteSteps = showRouteSteps,
-                onToggleRouteSteps = { showRouteSteps = !showRouteSteps },
-            )
+                    },
+                    showRouteSteps = showRouteSteps,
+                    onToggleRouteSteps = { showRouteSteps = !showRouteSteps },
+                    modifier = Modifier
+                        .width(maxWidth.coerceAtMost(960.dp))
+                        .align(Alignment.TopCenter),
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { _ ->

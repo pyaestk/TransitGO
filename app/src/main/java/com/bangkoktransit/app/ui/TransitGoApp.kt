@@ -3,7 +3,9 @@ package com.bangkoktransit.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -15,6 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -78,36 +83,53 @@ fun TransitGoApp(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-            ) {
-                BottomNavigationBar(
-                    currentScreen = screen,
-                    onSelect = { selectedScreen -> screen = selectedScreen },
-                )
-            }
-        },
-    ) { innerPadding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            val openPlanner: () -> Unit = { screen = AppScreen.Planner }
-            val openMap: () -> Unit = { screen = AppScreen.Map }
-            val openStationSearch: (StationPickerMode, Boolean) -> Unit = { mode, returnToMap ->
-                screen = AppScreen.StationSearch(mode, returnToMap)
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val useNavigationRail = maxWidth >= 840.dp
+        Row(Modifier.fillMaxSize()) {
+            if (useNavigationRail) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                ) {
+                    AppNavigationRail(
+                        currentScreen = screen,
+                        onSelect = { selectedScreen -> screen = selectedScreen },
+                    )
+                }
             }
 
-            when (val current = screen) {
+            Scaffold(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    if (!useNavigationRail) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                        ) {
+                            BottomNavigationBar(
+                                currentScreen = screen,
+                                onSelect = { selectedScreen -> screen = selectedScreen },
+                            )
+                        }
+                    }
+                },
+            ) { innerPadding ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    val openPlanner: () -> Unit = { screen = AppScreen.Planner }
+                    val openMap: () -> Unit = { screen = AppScreen.Map }
+                    val openStationSearch: (StationPickerMode, Boolean) -> Unit = { mode, returnToMap ->
+                        screen = AppScreen.StationSearch(mode, returnToMap)
+                    }
+
+                    when (val current = screen) {
                 AppScreen.Planner -> PlannerScreen(
                     state = state,
                     onChooseStart = { openStationSearch(StationPickerMode.Start, false) },
@@ -194,6 +216,8 @@ fun TransitGoApp(
                         },
                     )
                 }
+                    }
+                }
             }
         }
     }
@@ -235,4 +259,43 @@ private fun BottomNavigationBar(
             )
         }
     }
+}
+
+@Composable
+private fun AppNavigationRail(
+    currentScreen: AppScreen,
+    onSelect: (AppScreen) -> Unit,
+) {
+    val currentTab = currentTabForScreen(currentScreen)
+
+    NavigationRail(
+        modifier = Modifier.fillMaxHeight(),
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        MainTab.entries.forEach { tab ->
+            NavigationRailItem(
+                selected = currentTab == tab,
+                onClick = { onSelect(tab.screen) },
+                icon = { Icon(imageVector = tab.icon, contentDescription = null) },
+                label = { Text(tab.label) },
+                alwaysShowLabel = true,
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            )
+        }
+    }
+}
+
+private fun currentTabForScreen(currentScreen: AppScreen): MainTab? = when (currentScreen) {
+    AppScreen.Planner -> MainTab.Planner
+    AppScreen.Map -> MainTab.Map
+    AppScreen.SavedTrips -> MainTab.Saved
+    AppScreen.Settings -> MainTab.Settings
+    is AppScreen.StationSearch -> if (currentScreen.returnToMap) MainTab.Map else MainTab.Planner
+    is AppScreen.StationDetail -> null
 }
