@@ -1,6 +1,7 @@
 package com.bangkoktransit.app
 
-import com.bangkoktransit.app.data.model.*
+import com.bangkoktransit.app.domain.model.Station
+import com.bangkoktransit.app.domain.model.nearbyStations
 import org.junit.Assert.*
 import org.junit.Test
 
