@@ -190,6 +190,7 @@ fun PlannerScreen(
                 PrimaryActionButton(
                     text = if (state.isPlanningRoute) "Finding routes" else "Find routes",
                     enabled = canPlan,
+                    loading = state.isPlanningRoute,
                     icon = Icons.Filled.Route,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onPlanRoute,

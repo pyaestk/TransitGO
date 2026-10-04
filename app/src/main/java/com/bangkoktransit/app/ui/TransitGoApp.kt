@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -101,7 +102,7 @@ fun TransitGoApp(
             Scaffold(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 containerColor = MaterialTheme.colorScheme.background,
-                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                contentWindowInsets = WindowInsets.navigationBars,
                 bottomBar = {
                     if (!useNavigationRail) {
                         Surface(

@@ -1,6 +1,11 @@
 package com.bangkoktransit.app.ui.screens
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -728,6 +734,7 @@ fun PrimaryActionButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    loading: Boolean = false,
     icon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
@@ -738,17 +745,78 @@ fun PrimaryActionButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            disabledContainerColor = if (loading) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            disabledContentColor = if (loading) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         ),
         shape = ControlShape,
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
     ) {
-        if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        if (loading) {
+            Text(text = text, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.width(8.dp))
+            LoadingDots(color = MaterialTheme.colorScheme.onPrimary)
+        } else {
+            if (icon != null) {
+                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(text = text, fontWeight = FontWeight.SemiBold)
         }
-        Text(text = text, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun LoadingDots(color: Color) {
+    val transition = rememberInfiniteTransition(label = "loading dots")
+    val firstScale = transition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 420),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "first loading dot",
+    )
+    val secondScale = transition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 420, delayMillis = 140),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "second loading dot",
+    )
+    val thirdScale = transition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 420, delayMillis = 280),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "third loading dot",
+    )
+
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(firstScale.value, secondScale.value, thirdScale.value).forEach { scale ->
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .clip(CircleShape)
+                    .background(color),
+            )
+        }
     }
 }
 

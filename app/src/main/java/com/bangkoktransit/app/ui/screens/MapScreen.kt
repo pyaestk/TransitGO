@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -100,7 +101,9 @@ import com.bangkoktransit.app.ui.theme.TransitBlue
 import com.bangkoktransit.app.ui.theme.TransitCoral
 import com.bangkoktransit.app.ui.theme.TransitGreen
 import com.bangkoktransit.app.ui.viewmodel.TransitUiState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.hypot
 
 private const val MapMotionFastMillis = 160
 private const val MapMotionMediumMillis = 260
@@ -447,6 +450,7 @@ private fun RouteMapSheet(
             PrimaryActionButton(
                 text = if (state.isPlanningRoute) "Planning route" else "Plan route",
                 enabled = canPlan,
+                loading = state.isPlanningRoute,
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxWidth(),
@@ -880,6 +884,22 @@ private fun RouteMapCanvas(
 ) {
     val currentOnGesture by rememberUpdatedState(onGesture)
     val currentOnStationTap by rememberUpdatedState(onStationTap)
+    val directionProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(route?.routeKey) {
+        if (route?.stations.orEmpty().size > 1) {
+            while (true) {
+                directionProgress.snapTo(0f)
+                directionProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 3_200, easing = LinearEasing),
+                )
+                delay(550)
+            }
+        } else {
+            directionProgress.snapTo(0f)
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -941,6 +961,7 @@ private fun RouteMapCanvas(
                 startStation = startStation,
                 targetStation = targetStation,
                 scale = scale,
+                directionProgress = directionProgress.value,
             )
             RouteMarkers(
                 maxWidth = mapSize.width,
@@ -949,8 +970,18 @@ private fun RouteMapCanvas(
                 startStation = startStation,
                 targetStation = targetStation,
                 scale = scale,
+                directionProgress = directionProgress.value,
             )
         }
+    }
+}
+
+private fun RoutePath?.stationsFromStart(): List<RouteStation> {
+    val stations = this?.stations.orEmpty()
+    return when {
+        stations.firstOrNull()?.stationCode == this?.startStationCode -> stations
+        stations.lastOrNull()?.stationCode == this?.startStationCode -> stations.asReversed()
+        else -> stations
     }
 }
 
@@ -960,6 +991,7 @@ private fun RouteOverlay(
     startStation: Station?,
     targetStation: Station?,
     scale: Float,
+    directionProgress: Float,
 ) {
     val routeProgress = remember { Animatable(if (route == null) 0f else 1f) }
 
@@ -984,7 +1016,7 @@ private fun RouteOverlay(
     Canvas(modifier = Modifier.fillMaxSize()) {
         val adjustedScale = scale.coerceAtLeast(1f)
         val progress = routeProgress.value.coerceIn(0f, 1f)
-        val routePoints = route?.stations.orEmpty()
+        val routePoints = route.stationsFromStart()
             .filter { it.x > 0.0 || it.y > 0.0 }
             .map { routeStation ->
                 Offset(
@@ -993,8 +1025,10 @@ private fun RouteOverlay(
                 )
             }
 
+        val routeSegments = routePoints.zipWithNext()
+
         if (progress > 0f) {
-            routePoints.zipWithNext().forEach { (from, to) ->
+            routeSegments.forEach { (from, to) ->
                 drawLine(
                     color = TransitGreen.copy(alpha = 0.82f * progress),
                     start = from,
@@ -1010,6 +1044,76 @@ private fun RouteOverlay(
                     cap = StrokeCap.Round,
                 )
             }
+        }
+
+        if (routeSegments.isNotEmpty()) {
+            val totalLength = routeSegments.sumOf { (from, to) ->
+                hypot(
+                    (to.x - from.x).toDouble(),
+                    (to.y - from.y).toDouble(),
+                )
+            }
+            val indicatorHead = totalLength * directionProgress
+            val indicatorTail = (indicatorHead - 20f / adjustedScale).coerceAtLeast(0.0)
+            var distanceBeforeSegment = 0.0
+            for ((from, to) in routeSegments) {
+                val segmentLength = hypot(
+                    (to.x - from.x).toDouble(),
+                    (to.y - from.y).toDouble(),
+                )
+                val segmentEnd = distanceBeforeSegment + segmentLength
+                val visibleStart = maxOf(indicatorTail, distanceBeforeSegment)
+                val visibleEnd = minOf(indicatorHead, segmentEnd)
+
+                if (visibleEnd > visibleStart && segmentLength > 0.0) {
+                    val startFraction = ((visibleStart - distanceBeforeSegment) / segmentLength).toFloat()
+                    val endFraction = ((visibleEnd - distanceBeforeSegment) / segmentLength).toFloat()
+                    drawLine(
+                        color = Color(0xFF62E5FF),
+                        start = from + (to - from) * startFraction,
+                        end = from + (to - from) * endFraction,
+                        strokeWidth = 3f / adjustedScale,
+                        cap = StrokeCap.Round,
+                    )
+                }
+                distanceBeforeSegment = segmentEnd
+            }
+
+            var remainingDistance = indicatorHead
+            var signalPoint = routePoints.first()
+            for ((from, to) in routeSegments) {
+                val segmentLength = hypot(
+                    (to.x - from.x).toDouble(),
+                    (to.y - from.y).toDouble(),
+                )
+                if (remainingDistance <= segmentLength) {
+                    val segmentProgress = if (segmentLength == 0.0) {
+                        0f
+                    } else {
+                        (remainingDistance / segmentLength).toFloat()
+                    }
+                    signalPoint = from + (to - from) * segmentProgress
+                    break
+                }
+                remainingDistance -= segmentLength
+                signalPoint = to
+            }
+
+            drawCircle(
+                color = Color(0xFF62E5FF).copy(alpha = 0.32f),
+                radius = 11f / adjustedScale,
+                center = signalPoint,
+            )
+            drawCircle(
+                color = Color.White,
+                radius = 5.5f / adjustedScale,
+                center = signalPoint,
+            )
+            drawCircle(
+                color = Color(0xFF21B8E5),
+                radius = 3.5f / adjustedScale,
+                center = signalPoint,
+            )
         }
 
         listOfNotNull(startStation, targetStation)
@@ -1034,37 +1138,67 @@ private fun RouteMarkers(
     startStation: Station?,
     targetStation: Station?,
     scale: Float,
+    directionProgress: Float,
 ) {
-    val markerPulse = rememberInfiniteTransition(label = "routeMarkerPulse")
-    val markerScale by markerPulse.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.16f,
+    val flowPulse = rememberInfiniteTransition(label = "routeFlowPulse")
+    val flowHaloScale by flowPulse.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.35f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 780),
+            animation = tween(durationMillis = 620),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "routeMarkerScale",
+        label = "routeFlowHaloScale",
     )
-    val markerHaloAlpha by markerPulse.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.28f,
+    val flowHaloAlpha by flowPulse.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.52f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 780),
+            animation = tween(durationMillis = 620),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "routeMarkerHalo",
+        label = "routeFlowHaloAlpha",
     )
-    val hasActiveRoute = route != null
     val adjustedScale = scale.coerceAtLeast(1f)
     val markerSize = (18f / adjustedScale).dp
     val markerDotSize = (7f / adjustedScale).dp
     val markerBorder = (2f / adjustedScale).dp
+    val orderedRouteStations = route.stationsFromStart()
+        .filter { it.x > 0.0 || it.y > 0.0 }
+    val totalRouteDistance = orderedRouteStations.zipWithNext().sumOf { (from, to) ->
+        hypot(to.x - from.x, to.y - from.y)
+    }
+    val routeStationProgress = buildMap {
+        var distanceFromStart = 0.0
+        orderedRouteStations.forEachIndexed { index, station ->
+            val progress = if (orderedRouteStations.size <= 1) {
+                0f
+            } else {
+                if (totalRouteDistance > 0.0) {
+                    (distanceFromStart / totalRouteDistance).toFloat()
+                } else {
+                    0f
+                }
+            }
+            put(station.stationCode, progress)
+            if (index < orderedRouteStations.lastIndex) {
+                val next = orderedRouteStations[index + 1]
+                distanceFromStart += hypot(next.x - station.x, next.y - station.y)
+            }
+        }
+    }
+    val activeFlowStationCode = routeStationProgress
+        .minByOrNull { (_, progress) -> kotlin.math.abs(progress - directionProgress) }
+        ?.takeIf { (_, progress) ->
+            totalRouteDistance > 0.0 &&
+                kotlin.math.abs(progress - directionProgress) * totalRouteDistance <= 14.0
+        }
+        ?.key
     val markerStations = buildList {
-        addAll(route?.stations.orEmpty())
+        addAll(orderedRouteStations)
         startStation?.let { add(RouteStation(it.stationCode, it.x, it.y)) }
         targetStation?.let { add(RouteStation(it.stationCode, it.x, it.y)) }
     }
-        .filter { it.x > 0.0 || it.y > 0.0 }
         .distinctBy { it.stationCode }
 
     markerStations.forEach { station ->
@@ -1082,8 +1216,9 @@ private fun RouteMarkers(
             size = markerSize,
             dotSize = markerDotSize,
             borderWidth = markerBorder,
-            pulseScale = if (hasActiveRoute) markerScale else 1f,
-            haloAlpha = if (hasActiveRoute) markerHaloAlpha else 0f,
+            flowActive = station.stationCode == activeFlowStationCode,
+            flowHaloScale = flowHaloScale,
+            flowHaloAlpha = flowHaloAlpha,
             modifier = Modifier
                 .offset(
                     x = markerOffset.x - markerSize / 2f,
@@ -1100,34 +1235,31 @@ private fun MapMarker(
     size: Dp,
     dotSize: Dp,
     borderWidth: Dp,
-    pulseScale: Float,
-    haloAlpha: Float,
+    flowActive: Boolean,
+    flowHaloScale: Float,
+    flowHaloAlpha: Float,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center,
     ) {
-        if (haloAlpha > 0f) {
+        if (flowActive) {
             Box(
                 modifier = Modifier
-                    .size(size * 1.65f)
+                    .size(size * 1.5f)
                     .graphicsLayer {
-                        scaleX = pulseScale
-                        scaleY = pulseScale
-                        alpha = haloAlpha
+                        scaleX = flowHaloScale
+                        scaleY = flowHaloScale
+                        alpha = flowHaloAlpha
                     }
                     .clip(CircleShape)
-                    .background(color),
+                    .background(Color(0xFF62E5FF)),
             )
         }
         Surface(
             modifier = Modifier
                 .size(size)
-                .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                }
                 .clip(CircleShape),
             color = Color.White,
             shape = CircleShape,
