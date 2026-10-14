@@ -2,7 +2,9 @@ package com.bangkoktransit.app.di
 
 import com.bangkoktransit.app.data.api.BangkokRailwayApi
 import com.bangkoktransit.app.data.local.TransitDataCache
+import com.bangkoktransit.app.data.local.StationDataCache
 import com.bangkoktransit.app.data.local.TripStore
+import com.bangkoktransit.app.data.local.AndroidStringPreferences
 import com.bangkoktransit.app.data.repository.TransitRepository as TransitRepositoryImpl
 import com.bangkoktransit.app.domain.repository.SavedTripsRepository
 import com.bangkoktransit.app.domain.repository.TransitRepository
@@ -17,9 +19,9 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { BangkokRailwayApi() }
-    single { TransitDataCache(get()) }
+    single<StationDataCache> { TransitDataCache(get()) }
     single<TransitRepository> { TransitRepositoryImpl(get(), get()) }
-    single<SavedTripsRepository> { TripStore(get()) }
+    single<SavedTripsRepository> { TripStore(AndroidStringPreferences(get(), "transit_trips")) }
 
     factory { GetStations(get()) }
     factory { RefreshStations(get()) }

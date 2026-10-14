@@ -23,5 +23,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "transitgo"
-include(":app")
- 
+include(":app", ":shared")

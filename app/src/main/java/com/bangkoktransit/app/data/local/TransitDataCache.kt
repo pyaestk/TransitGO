@@ -1,20 +1,20 @@
 package com.bangkoktransit.app.data.local
 
 import android.content.Context
-import com.transitgo.app.R
+import kotlinx.coroutines.CancellationException
 
-class TransitDataCache(context: Context) {
+class TransitDataCache(context: Context) : StationDataCache {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences("transit_data", Context.MODE_PRIVATE)
 
-    fun readStations(maxAgeMillis: Long): String? {
+    override fun readStations(maxAgeMillis: Long): String? {
         val savedAt = preferences.getLong(KEY_STATIONS_SAVED_AT, 0L)
         val json = preferences.getString(KEY_STATIONS_JSON, null)
         val isFresh = savedAt > 0L && System.currentTimeMillis() - savedAt <= maxAgeMillis
         return json?.takeIf { isFresh && it.isNotBlank() }
     }
 
-    fun writeStations(json: String) {
+    override fun writeStations(json: String) {
         if (json.isBlank()) return
         preferences.edit()
             .putString(KEY_STATIONS_JSON, json)
@@ -22,12 +22,14 @@ class TransitDataCache(context: Context) {
             .apply()
     }
 
-    fun readFallbackStations(): String? {
-        return runCatching {
-            appContext.resources.openRawResource(R.raw.stations_fallback)
-                .bufferedReader()
-                .use { it.readText() }
-        }.getOrNull()
+    override suspend fun readFallbackStations(): String? {
+        return try {
+            readBundledStations()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            null
+        }
     }
 
     private companion object {

@@ -8,7 +8,14 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+# Generated output from every Gradle module, including shared iOS frameworks.
+build/
+.kotlin/
+
+# Local Xcode build output and user-specific state.
+DerivedData/
+xcuserdata/
+*.xcuserstate
 /captures
 .externalNativeBuild
 .cxx

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import org.koin.androidx.compose.koinViewModel
 import com.bangkoktransit.app.ui.screens.MapScreen
+import com.bangkoktransit.app.ui.screens.NearbyStationsSection
 import com.bangkoktransit.app.ui.screens.PlannerScreen
 import com.bangkoktransit.app.ui.screens.SavedTripsScreen
 import com.bangkoktransit.app.ui.screens.SettingsScreen
@@ -52,11 +53,6 @@ sealed interface AppScreen {
     data class StationDetail(val stationCode: String) : AppScreen
 }
 
-enum class StationPickerMode {
-    Browse,
-    Start,
-    Target,
-}
 
 private enum class MainTab(val label: String, val icon: ImageVector, val screen: AppScreen) {
     Planner("Plan", Icons.Filled.Route, AppScreen.Planner),
@@ -194,6 +190,20 @@ fun TransitGoApp(
                         }
                     },
                     onRetry = { viewModel.refreshTransitData(forceRefresh = true) },
+                    nearbyContent = {
+                        NearbyStationsSection(
+                            stations = state.stations,
+                            onStationSelected = { station ->
+                                when (current.mode) {
+                                    StationPickerMode.Start -> viewModel.selectStart(station)
+                                    StationPickerMode.Target -> viewModel.selectTarget(station)
+                                    StationPickerMode.Browse -> Unit
+                                }
+                                screen = if (current.returnToMap) AppScreen.Map else AppScreen.Planner
+                            },
+                            onRefreshStations = { viewModel.refreshTransitData(forceRefresh = true) },
+                        )
+                    },
                 )
                 is AppScreen.StationDetail -> {
                     val station = viewModel.stationByCode(current.stationCode)
